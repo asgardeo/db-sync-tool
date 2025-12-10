@@ -1,0 +1,124 @@
+syntax = "proto3";
+
+package cdc_sync;
+
+option go_package = "github.com/wso2/db-sync-tool/proto";
+
+import "google/protobuf/timestamp.proto";
+
+// The CDC synchronization service using bidirectional streaming
+// for reliable change delivery with acknowledgments.
+service CdcSync {
+  // Bidirectional streaming RPC for CDC changes.
+  // Source streams changes, Target streams acknowledgments.
+  rpc StreamChanges(stream ChangeRequest) returns (stream ChangeAck);
+
+  // Health check endpoint
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+// Represents a single CDC change event
+message ChangeRequest {
+  // Unique identifier for this change batch
+  string batch_id = 1;
+
+  // The LSN (Log Sequence Number) from MSSQL CDC
+  bytes lsn = 2;
+
+  // Sequence number within the batch
+  uint64 sequence_number = 3;
+
+  // The operation type
+  OperationType operation = 4;
+
+  // Target schema and table
+  string schema_name = 5;
+  string table_name = 6;
+
+  // Primary key columns and their values (JSON encoded)
+  string primary_key_json = 7;
+
+  // The row data (JSON encoded for flexibility)
+  // For DELETE operations, this contains the old values
+  // For INSERT/UPDATE, this contains the new values
+  string row_data_json = 8;
+
+  // For UPDATE operations, the previous values
+  optional string old_row_data_json = 9;
+
+  // Timestamp when the change occurred in source DB
+  google.protobuf.Timestamp source_timestamp = 10;
+
+  // Column metadata for schema validation
+  repeated ColumnMetadata columns = 11;
+}
+
+// Operation types matching MSSQL CDC __$operation values
+enum OperationType {
+  OPERATION_TYPE_UNSPECIFIED = 0;
+  OPERATION_TYPE_DELETE = 1;      // __$operation = 1
+  OPERATION_TYPE_INSERT = 2;      // __$operation = 2
+  OPERATION_TYPE_UPDATE_OLD = 3;  // __$operation = 3 (before image)
+  OPERATION_TYPE_UPDATE_NEW = 4;  // __$operation = 4 (after image)
+}
+
+// Column metadata for schema awareness
+message ColumnMetadata {
+  string name = 1;
+  string data_type = 2;
+  bool is_nullable = 3;
+  bool is_primary_key = 4;
+  optional int32 max_length = 5;
+  optional int32 precision = 6;
+  optional int32 scale = 7;
+}
+
+// Acknowledgment from Target to Source
+message ChangeAck {
+  // The batch_id being acknowledged
+  string batch_id = 1;
+
+  // The LSN being acknowledged (Source can advance cursor past this)
+  bytes lsn = 2;
+
+  // Highest sequence number successfully processed in this batch
+  uint64 last_sequence_number = 3;
+
+  // Acknowledgment status
+  AckStatus status = 4;
+
+  // Error message if status is not OK
+  optional string error_message = 5;
+
+  // Number of rows successfully processed
+  uint64 rows_processed = 6;
+
+  // Processing duration in milliseconds
+  uint64 processing_time_ms = 7;
+}
+
+// Acknowledgment status codes
+enum AckStatus {
+  ACK_STATUS_UNSPECIFIED = 0;
+  ACK_STATUS_OK = 1;              // All changes applied successfully
+  ACK_STATUS_PARTIAL = 2;         // Some changes applied (check last_sequence_number)
+  ACK_STATUS_RETRY = 3;           // Transient error, source should retry
+  ACK_STATUS_FAILED = 4;          // Permanent failure, manual intervention needed
+  ACK_STATUS_SCHEMA_MISMATCH = 5; // Schema incompatibility detected
+}
+
+// Health check messages
+message HealthCheckRequest {
+  string service_name = 1;
+}
+
+message HealthCheckResponse {
+  enum ServingStatus {
+    SERVING_STATUS_UNSPECIFIED = 0;
+    SERVING_STATUS_SERVING = 1;
+    SERVING_STATUS_NOT_SERVING = 2;
+  }
+  ServingStatus status = 1;
+  string version = 2;
+  google.protobuf.Timestamp server_time = 3;
+}

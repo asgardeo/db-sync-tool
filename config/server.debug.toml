@@ -1,0 +1,23 @@
+# CDC Server Debug Configuration
+# This debug-specific config is loaded when you set SERVER_CONFIG_FILE=config/server.debug
+
+# Local PostgreSQL connection string (uncomment when running a local DB)
+postgres_connection_string = "postgres://postgres:StrongPassword123!@localhost:5432/testdb"
+
+# Run on a different debug port so it can be started side-by-side
+listen_addr = "127.0.0.1:50051"
+
+# Limit concurrency while debugging
+max_concurrent_batches = 1
+
+# Keep debug schema mappings simple
+idempotent_writes = true
+
+[tls]
+# cert_path = "./certs/server.crt"
+# key_path = "./certs/server.key"
+# ca_cert_path = "./certs/ca.crt"
+
+[[schema_mappings]]
+source_schema = "dbo"
+target_schema = "public"

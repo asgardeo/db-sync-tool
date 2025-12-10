@@ -1,0 +1,33 @@
+# CDC Server Configuration
+# This file is loaded automatically. Values can be overridden with environment variables
+# prefixed with SERVER__ (e.g., SERVER__POSTGRES_CONNECTION_STRING)
+
+# PostgreSQL connection string (required)
+# postgres_connection_string = "postgres://user:password@localhost:5432/mydb"
+
+# gRPC server listen address
+listen_addr = "0.0.0.0:50051"
+
+# Maximum concurrent batch processing
+max_concurrent_batches = 4
+
+# Enable idempotent upserts (INSERT ON CONFLICT UPDATE)
+# Recommended for safe replay of changes
+idempotent_writes = true
+
+# TLS Configuration for the gRPC server
+[tls]
+# Path to server certificate
+# cert_path = "./certs/server.crt"
+
+# Path to server private key
+# key_path = "./certs/server.key"
+
+# Path to CA certificate (for mTLS client verification)
+# ca_cert_path = "./certs/ca.crt"
+
+# Schema mapping overrides
+# Use this to map source schemas to different target schemas
+[[schema_mappings]]
+source_schema = "dbo"
+target_schema = "public"

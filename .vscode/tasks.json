@@ -1,0 +1,44 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "go: build (cdc-client)",
+      "type": "shell",
+      "command": "go build -o bin/cdc-client ./cmd/cdc-client",
+      "group": { "kind": "build", "isDefault": false },
+      "problemMatcher": ["$go"],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "go: build (cdc-server)",
+      "type": "shell",
+      "command": "go build -o bin/cdc-server ./cmd/cdc-server",
+      "group": "build",
+      "problemMatcher": ["$go"],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "go: build all",
+      "type": "shell",
+      "command": "go build -o bin/cdc-client ./cmd/cdc-client && go build -o bin/cdc-server ./cmd/cdc-server",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": ["$go"],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "go: test",
+      "type": "shell",
+      "command": "go test ./...",
+      "group": "test",
+      "problemMatcher": ["$go"],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "go: mod tidy",
+      "type": "shell",
+      "command": "go mod tidy",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    }
+  ]
+}

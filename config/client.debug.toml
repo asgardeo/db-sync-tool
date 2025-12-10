@@ -1,0 +1,40 @@
+# CDC Client Debug Configuration
+# This debug-specific config is loaded when you set CLIENT_CONFIG_FILE=config/client.debug
+
+# Example local MSSQL connection string (uncomment and edit when running locally)
+mssql_connection_string = "Server=localhost;Database=testdb;User Id=sa;Password=StrongPassword123!;TrustServerCertificate=true"
+
+# Connect to local server running on debug port
+server_url = "http://127.0.0.1:50051"
+
+# Keep debug state separate so you don't pollute production state
+state_file_path = "./data/cdc_cursor_state.debug.json"
+
+# Faster polling when debugging
+poll_interval_ms = 200
+
+# Smaller batch size for easier testing
+batch_size = 50
+
+# Acknowledgment timeout (seconds)
+ack_timeout_secs = 10
+
+# TLS configuration for local development (usually not used)
+[tls]
+# ca_cert_path = "./certs/ca.crt"
+# client_cert_path = "./certs/client.crt"
+# client_key_path = "./certs/client.key"
+# domain_name = "localhost"
+
+# Track the example tables from the repository
+[[tracked_tables]]
+source_schema = "dbo"
+source_table = "users"
+target_schema = "public"
+target_table = "users"
+
+[[tracked_tables]]
+source_schema = "dbo"
+source_table = "orders"
+target_schema = "public"
+target_table = "orders"
