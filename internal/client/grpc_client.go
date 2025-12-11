@@ -61,10 +61,10 @@ func createChannel(config *Config) (*grpc.ClientConn, error) {
 	}
 
 	// Connect with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	_, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	conn, err := grpc.DialContext(ctx, config.ServerURL, opts...)
+	conn, err := grpc.NewClient(config.ServerURL, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to server: %w", err)
 	}

@@ -16,7 +16,9 @@
       "Bash(docker ps:*)",
       "Bash(go mod tidy:*)",
       "Bash(go build:*)",
-      "mcp__mssql__execute_query"
+      "mcp__mssql__execute_query",
+      "Bash(chmod:*)",
+      "Bash(./run_cdc_test.sh:*)"
     ],
     "deny": [],
     "ask": []

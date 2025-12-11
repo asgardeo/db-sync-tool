@@ -144,13 +144,15 @@ func (r *CdcReader) getLsnRange(ctx context.Context) ([]byte, []byte, error) {
 	}
 
 	// Get the minimum LSN across all capture instances
+	// We need to query each capture instance and find the minimum valid LSN
 	minQuery := `
-		SELECT MIN(min_lsn)
+		SELECT TOP 1 min_lsn
 		FROM (
 			SELECT sys.fn_cdc_get_min_lsn(capture_instance) as min_lsn
 			FROM cdc.change_tables
 		) as mins
-		WHERE min_lsn IS NOT NULL
+		WHERE min_lsn IS NOT NULL AND min_lsn > 0x00000000000000000000
+		ORDER BY min_lsn ASC
 	`
 	var minLsn []byte
 	if err := r.db.QueryRowContext(ctx, minQuery).Scan(&minLsn); err != nil {
@@ -211,6 +213,19 @@ func (r *CdcReader) getCdcTables(ctx context.Context) ([]cdcTable, error) {
 }
 
 func (r *CdcReader) readTableChanges(ctx context.Context, captureInstance, schema, table string, fromLsn []byte, batchSize uint32) ([]*proto.ChangeRequest, error) {
+	// Get the minimum valid LSN for this specific capture instance
+	var tableMinLsn []byte
+	minLsnQuery := fmt.Sprintf("SELECT sys.fn_cdc_get_min_lsn('%s')", captureInstance)
+	if err := r.db.QueryRowContext(ctx, minLsnQuery).Scan(&tableMinLsn); err != nil {
+		return nil, fmt.Errorf("failed to get min LSN for %s: %w", captureInstance, err)
+	}
+
+	// Use the greater of fromLsn or tableMinLsn to ensure we're within valid range
+	effectiveLsn := fromLsn
+	if len(tableMinLsn) > 0 && common.NewLsn(tableMinLsn).ToHexString() > common.NewLsn(fromLsn).ToHexString() {
+		effectiveLsn = tableMinLsn
+	}
+
 	// Get column metadata if not cached
 	tableKey := fmt.Sprintf("%s.%s", schema, table)
 
@@ -237,7 +252,7 @@ func (r *CdcReader) readTableChanges(ctx context.Context, captureInstance, schem
 	columnList := strings.Join(columnNames, ", ")
 
 	// Build the CDC query
-	fromLsnHex := common.NewLsn(fromLsn).ToHexString()
+	fromLsnHex := common.NewLsn(effectiveLsn).ToHexString()
 	query := fmt.Sprintf(`
 		SELECT TOP (%d)
 			__$start_lsn,
