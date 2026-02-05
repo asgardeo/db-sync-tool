@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"os"
 	"os/signal"
@@ -15,6 +16,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/wso2/db-sync-tool/internal/common"
+	"github.com/wso2/db-sync-tool/internal/connector/postgres"
 	"github.com/wso2/db-sync-tool/internal/server"
 	"github.com/wso2/db-sync-tool/proto"
 	"google.golang.org/grpc"
@@ -49,16 +51,30 @@ func main() {
 }
 
 func runServer(config *server.Config) error {
-	// Create the PostgreSQL writer
-	pgWriter, err := server.NewPostgresWriter(config.PostgresConnectionString)
-	if err != nil {
-		return err
+	// Create the SQL writer based on writer type
+	var writer server.SQLWriter
+	switch config.WriterType {
+	case "postgres":
+		schemaMappings := make([]postgres.SchemaMapping, len(config.SchemaMappings))
+		for i, m := range config.SchemaMappings {
+			schemaMappings[i] = postgres.SchemaMapping{
+				SourceSchema: m.SourceSchema,
+				TargetSchema: m.TargetSchema,
+			}
+		}
+		pgWriter, err := postgres.NewPostgreSQLWriter(config.ConnectionString, schemaMappings)
+		if err != nil {
+			return err
+		}
+		writer = pgWriter
+		log.Info().Msg("Connected to PostgreSQL")
+	default:
+		return fmt.Errorf("unsupported writer type: %s", config.WriterType)
 	}
-	defer pgWriter.Close()
-	log.Info().Msg("Connected to PostgreSQL")
+	defer writer.Close()
 
 	// Create the gRPC service
-	cdcService := server.NewCdcSyncService(pgWriter, config)
+	cdcService := server.NewCdcSyncService(writer, config)
 
 	// Build the server
 	var opts []grpc.ServerOption

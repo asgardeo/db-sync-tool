@@ -1,4 +1,5 @@
-package client
+// Package mssql provides an MSSQL CDC reader implementation.
+package mssql
 
 import (
 	"context"
@@ -17,15 +18,18 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// CdcReader reads CDC changes from MSSQL.
-type CdcReader struct {
+// MSSQLReader reads CDC changes from Microsoft SQL Server.
+// Implements the connector.CDCReader interface.
+
+// MSSQLReader reads CDC changes from Microsoft SQL Server.
+type MSSQLReader struct {
 	db          *sql.DB
 	schemaCache map[string][]*proto.ColumnMetadata
 	cacheMu     sync.RWMutex
 }
 
-// NewCdcReader creates a new CDC reader with the given connection string.
-func NewCdcReader(connectionString string) (*CdcReader, error) {
+// NewMSSQLReader creates a new MSSQL CDC reader with the given connection string.
+func NewMSSQLReader(connectionString string) (*MSSQLReader, error) {
 	db, err := sql.Open("sqlserver", connectionString)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database connection: %w", err)
@@ -40,19 +44,25 @@ func NewCdcReader(connectionString string) (*CdcReader, error) {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	return &CdcReader{
+	return &MSSQLReader{
 		db:          db,
 		schemaCache: make(map[string][]*proto.ColumnMetadata),
 	}, nil
 }
 
 // Close closes the database connection.
-func (r *CdcReader) Close() error {
+func (r *MSSQLReader) Close() error {
 	return r.db.Close()
 }
 
 // PollChanges polls for CDC changes starting from the given LSN.
-func (r *CdcReader) PollChanges(ctx context.Context, fromLsn *common.Lsn, batchSize uint32) ([]*proto.ChangeRequest, error) {
+func (r *MSSQLReader) PollChanges(ctx context.Context, fromPosition []byte, batchSize uint32) ([]*proto.ChangeRequest, error) {
+	var fromLsn *common.Lsn
+	if len(fromPosition) > 0 {
+		lsn := common.NewLsn(fromPosition)
+		fromLsn = &lsn
+	}
+
 	// Get the valid LSN range
 	minLsn, maxLsn, err := r.getLsnRange(ctx)
 	if err != nil {
@@ -116,10 +126,6 @@ func (r *CdcReader) PollChanges(ctx context.Context, fromLsn *common.Lsn, batchS
 		}
 	}
 
-	// Sort by LSN and sequence number for consistent ordering
-	// (Go's sort is stable, so we can sort twice)
-	// For simplicity, just return as-is since CDC returns ordered
-
 	return allChanges, nil
 }
 
@@ -129,7 +135,7 @@ type cdcTable struct {
 	CaptureInstance string
 }
 
-func (r *CdcReader) getLsnRange(ctx context.Context) ([]byte, []byte, error) {
+func (r *MSSQLReader) getLsnRange(ctx context.Context) ([]byte, []byte, error) {
 	var maxLsn []byte
 
 	// Get max LSN (global across all capture instances)
@@ -144,7 +150,6 @@ func (r *CdcReader) getLsnRange(ctx context.Context) ([]byte, []byte, error) {
 	}
 
 	// Get the minimum LSN across all capture instances
-	// We need to query each capture instance and find the minimum valid LSN
 	minQuery := `
 		SELECT TOP 1 min_lsn
 		FROM (
@@ -165,7 +170,7 @@ func (r *CdcReader) getLsnRange(ctx context.Context) ([]byte, []byte, error) {
 	return minLsn, maxLsn, nil
 }
 
-func (r *CdcReader) getNextLsn(ctx context.Context, lsn []byte) ([]byte, error) {
+func (r *MSSQLReader) getNextLsn(ctx context.Context, lsn []byte) ([]byte, error) {
 	var nextLsn []byte
 
 	query := fmt.Sprintf("SELECT sys.fn_cdc_increment_lsn(0x%s)", common.NewLsn(lsn).ToHexString())
@@ -181,7 +186,7 @@ func (r *CdcReader) getNextLsn(ctx context.Context, lsn []byte) ([]byte, error) 
 	return nextLsn, nil
 }
 
-func (r *CdcReader) getCdcTables(ctx context.Context) ([]cdcTable, error) {
+func (r *MSSQLReader) getCdcTables(ctx context.Context) ([]cdcTable, error) {
 	query := `
 		SELECT
 			OBJECT_SCHEMA_NAME(source_object_id) as schema_name,
@@ -212,7 +217,7 @@ func (r *CdcReader) getCdcTables(ctx context.Context) ([]cdcTable, error) {
 	return tables, rows.Err()
 }
 
-func (r *CdcReader) readTableChanges(ctx context.Context, captureInstance, schema, table string, fromLsn []byte, batchSize uint32) ([]*proto.ChangeRequest, error) {
+func (r *MSSQLReader) readTableChanges(ctx context.Context, captureInstance, schema, table string, fromLsn []byte, batchSize uint32) ([]*proto.ChangeRequest, error) {
 	// Get the minimum valid LSN for this specific capture instance
 	var tableMinLsn []byte
 	minLsnQuery := fmt.Sprintf("SELECT sys.fn_cdc_get_min_lsn('%s')", captureInstance)
@@ -308,7 +313,7 @@ func (r *CdcReader) readTableChanges(ctx context.Context, captureInstance, schem
 	return changes, rows.Err()
 }
 
-func (r *CdcReader) rowToChangeRequest(values []interface{}, colTypes []*sql.ColumnType, schema, table string, columns []*proto.ColumnMetadata, sequence uint64) (*proto.ChangeRequest, error) {
+func (r *MSSQLReader) rowToChangeRequest(values []interface{}, colTypes []*sql.ColumnType, schema, table string, columns []*proto.ColumnMetadata, sequence uint64) (*proto.ChangeRequest, error) {
 	// Extract CDC metadata columns (first 4)
 	var lsn []byte
 	if v, ok := values[0].([]byte); ok {
@@ -403,7 +408,7 @@ func convertValue(val interface{}, colType *sql.ColumnType) interface{} {
 	}
 }
 
-func (r *CdcReader) getColumnMetadata(ctx context.Context, schema, table string) ([]*proto.ColumnMetadata, error) {
+func (r *MSSQLReader) getColumnMetadata(ctx context.Context, schema, table string) ([]*proto.ColumnMetadata, error) {
 	query := fmt.Sprintf(`
 		SELECT
 			c.COLUMN_NAME,

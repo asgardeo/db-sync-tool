@@ -1,9 +1,14 @@
 # CDC Client Configuration
 # This file is loaded automatically. Values can be overridden with environment variables
-# prefixed with CLIENT__ (e.g., CLIENT__MSSQL_CONNECTION_STRING)
+# prefixed with CLIENT__ (e.g., CLIENT__CONNECTION_STRING)
 
-# MSSQL connection string (required)
-# mssql_connection_string = "Server=localhost;Database=mydb;User Id=sa;Password=secret;TrustServerCertificate=true"
+# CDC Reader type (currently supports: "mssql")
+reader_type = "mssql"
+
+# Database connection string (required)
+# connection_string = "Server=localhost;Database=mydb;User Id=sa;Password=secret;TrustServerCertificate=true"
+
+# Legacy MSSQL connection string (deprecated, use connection_string instead)
 
 # Server gRPC URL (required)
 # server_url = "https://server.example.com:50051"

@@ -12,7 +12,16 @@ import (
 
 // Config holds the client configuration.
 type Config struct {
-	// MssqlConnectionString is the MSSQL connection string
+	// Sources is a list of database sources to track
+	Sources []SourceConfig `toml:"sources"`
+
+	// Deprecated: ReaderType is deprecated, use Sources instead
+	ReaderType string `toml:"reader_type"`
+
+	// Deprecated: ConnectionString is deprecated, use Sources instead
+	ConnectionString string `toml:"connection_string"`
+
+	// Deprecated: MssqlConnectionString is deprecated, use ConnectionString instead
 	MssqlConnectionString string `toml:"mssql_connection_string"`
 
 	// ServerURL is the CDC Server gRPC URL (e.g., "localhost:50051")
@@ -52,9 +61,24 @@ type TLSConfig struct {
 	DomainName *string `toml:"domain_name"`
 }
 
+// SourceConfig holds configuration for a single database source.
+type SourceConfig struct {
+	// Name is the unique identifier for this source
+	Name string `toml:"name"`
+
+	// Type specifies the CDC reader type (e.g., "mssql")
+	Type string `toml:"type"`
+
+	// ConnectionString is the database connection string
+	ConnectionString string `toml:"connection_string"`
+}
+
 // DefaultConfig returns a Config with default values.
 func DefaultConfig() Config {
 	return Config{
+		// Default to empty sources
+		Sources:        []SourceConfig{},
+		ReaderType:     "mssql",
 		StateFilePath:  "./data/cdc_cursor_state.json",
 		PollIntervalMs: 1000,
 		BatchSize:      1000,
@@ -80,6 +104,12 @@ func LoadConfig() (*Config, error) {
 	}
 
 	// Override with environment variables
+	if v := os.Getenv("CLIENT__READER_TYPE"); v != "" {
+		config.ReaderType = v
+	}
+	if v := os.Getenv("CLIENT__CONNECTION_STRING"); v != "" {
+		config.ConnectionString = v
+	}
 	if v := os.Getenv("CLIENT__MSSQL_CONNECTION_STRING"); v != "" {
 		config.MssqlConnectionString = v
 	}
@@ -105,9 +135,24 @@ func LoadConfig() (*Config, error) {
 		}
 	}
 
+	// Backward compatibility: use mssql_connection_string if connection_string is not set
+	if config.ConnectionString == "" && config.MssqlConnectionString != "" {
+		config.ConnectionString = config.MssqlConnectionString
+	}
+
 	// Validate required fields
-	if config.MssqlConnectionString == "" {
-		return nil, fmt.Errorf("mssql_connection_string is required")
+	if len(config.Sources) == 0 {
+		// If no sources defined, check for legacy config
+		if config.ConnectionString != "" {
+			// Convert legacy config to a default source
+			config.Sources = append(config.Sources, SourceConfig{
+				Name:             "default",
+				Type:             config.ReaderType,
+				ConnectionString: config.ConnectionString,
+			})
+		} else {
+			return nil, fmt.Errorf("at least one source or connection_string is required")
+		}
 	}
 	if config.ServerURL == "" {
 		return nil, fmt.Errorf("server_url is required")

@@ -1,9 +1,14 @@
 # CDC Server Configuration
 # This file is loaded automatically. Values can be overridden with environment variables
-# prefixed with SERVER__ (e.g., SERVER__POSTGRES_CONNECTION_STRING)
+# prefixed with SERVER__ (e.g., SERVER__CONNECTION_STRING)
 
-# PostgreSQL connection string (required)
-# postgres_connection_string = "postgres://user:password@localhost:5432/mydb"
+# SQL Writer type (currently supports: "postgres")
+writer_type = "postgres"
+
+# Database connection string (required)
+# connection_string = "postgres://user:password@localhost:5432/mydb"
+
+# Legacy PostgreSQL connection string (deprecated, use connection_string instead)
 
 # gRPC server listen address
 listen_addr = "0.0.0.0:50051"

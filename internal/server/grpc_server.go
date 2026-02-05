@@ -14,18 +14,26 @@ import (
 // Version is the server version.
 const Version = "1.0.0"
 
+// SQLWriter defines the interface for writing changes to a database.
+// This allows the CdcSyncService to work with different database implementations.
+type SQLWriter interface {
+	ApplyChanges(ctx context.Context, changes []*proto.ChangeRequest, idempotent bool) (uint64, error)
+	IsHealthy(ctx context.Context) bool
+	Close()
+}
+
 // CdcSyncService is the CDC synchronization service implementation.
 type CdcSyncService struct {
 	proto.UnimplementedCdcSyncServer
-	pgWriter *PostgresWriter
-	config   *Config
+	writer SQLWriter
+	config *Config
 }
 
 // NewCdcSyncService creates a new CDC sync service.
-func NewCdcSyncService(pgWriter *PostgresWriter, config *Config) *CdcSyncService {
+func NewCdcSyncService(writer SQLWriter, config *Config) *CdcSyncService {
 	return &CdcSyncService{
-		pgWriter: pgWriter,
-		config:   config,
+		writer: writer,
+		config: config,
 	}
 }
 
@@ -101,7 +109,7 @@ func (s *CdcSyncService) processBatch(ctx context.Context, batchID *string, chan
 		Uint64("change_count", changeCount).
 		Msg("Processing batch")
 
-	rowsAffected, err := s.pgWriter.ApplyChanges(ctx, changes, s.config.IdempotentWrites)
+	rowsAffected, err := s.writer.ApplyChanges(ctx, changes, s.config.IdempotentWrites)
 	if err != nil {
 		log.Error().
 			Str("batch_id", batchIDStr).
@@ -142,7 +150,7 @@ func (s *CdcSyncService) processBatch(ctx context.Context, batchID *string, chan
 func (s *CdcSyncService) HealthCheck(ctx context.Context, req *proto.HealthCheckRequest) (*proto.HealthCheckResponse, error) {
 	// Check database connectivity
 	var status proto.HealthCheckResponse_ServingStatus
-	if s.pgWriter.IsHealthy(ctx) {
+	if s.writer.IsHealthy(ctx) {
 		status = proto.HealthCheckResponse_SERVING_STATUS_SERVING
 	} else {
 		status = proto.HealthCheckResponse_SERVING_STATUS_NOT_SERVING

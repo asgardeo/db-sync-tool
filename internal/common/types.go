@@ -58,6 +58,7 @@ func (l *Lsn) UnmarshalJSON(data []byte) error {
 
 // TrackedTable represents a tracked table configuration for CDC.
 type TrackedTable struct {
+	DatabaseName      string            `json:"database_name" toml:"database_name"`
 	SourceSchema      string            `json:"source_schema" toml:"source_schema"`
 	SourceTable       string            `json:"source_table" toml:"source_table"`
 	TargetSchema      string            `json:"target_schema" toml:"target_schema"`

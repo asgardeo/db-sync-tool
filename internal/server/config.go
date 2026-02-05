@@ -11,7 +11,14 @@ import (
 
 // Config holds the server configuration.
 type Config struct {
-	// PostgresConnectionString is the PostgreSQL connection string
+	// WriterType specifies the SQL writer type (e.g., "postgres")
+	WriterType string `toml:"writer_type"`
+
+	// ConnectionString is the database connection string for the SQL writer
+	ConnectionString string `toml:"connection_string"`
+
+	// PostgresConnectionString is deprecated, use ConnectionString instead
+	// Kept for backward compatibility
 	PostgresConnectionString string `toml:"postgres_connection_string"`
 
 	// ListenAddr is the address to listen on (e.g., "0.0.0.0:50051")
@@ -51,6 +58,7 @@ type SchemaMapping struct {
 // DefaultConfig returns a Config with default values.
 func DefaultConfig() Config {
 	return Config{
+		WriterType:           "postgres",
 		ListenAddr:           "0.0.0.0:50051",
 		MaxConcurrentBatches: 4,
 		IdempotentWrites:     true,
@@ -75,6 +83,12 @@ func LoadConfig() (*Config, error) {
 	}
 
 	// Override with environment variables
+	if v := os.Getenv("SERVER__WRITER_TYPE"); v != "" {
+		config.WriterType = v
+	}
+	if v := os.Getenv("SERVER__CONNECTION_STRING"); v != "" {
+		config.ConnectionString = v
+	}
 	if v := os.Getenv("SERVER__POSTGRES_CONNECTION_STRING"); v != "" {
 		config.PostgresConnectionString = v
 	}
@@ -90,9 +104,14 @@ func LoadConfig() (*Config, error) {
 		config.IdempotentWrites = v == "true" || v == "1"
 	}
 
+	// Backward compatibility: use postgres_connection_string if connection_string is not set
+	if config.ConnectionString == "" && config.PostgresConnectionString != "" {
+		config.ConnectionString = config.PostgresConnectionString
+	}
+
 	// Validate required fields
-	if config.PostgresConnectionString == "" {
-		return nil, fmt.Errorf("postgres_connection_string is required")
+	if config.ConnectionString == "" {
+		return nil, fmt.Errorf("connection_string is required")
 	}
 
 	return &config, nil

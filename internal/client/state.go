@@ -14,14 +14,16 @@ import (
 // StateManager manages persistent state for CDC cursor tracking.
 type StateManager struct {
 	statePath string
-	state     *common.CdcCursorState
-	mu        sync.RWMutex
+	// state is a map of source name -> cursor state
+	state map[string]*common.CdcCursorState
+	mu    sync.RWMutex
 }
 
 // NewStateManager creates a new state manager, loading existing state if present.
 func NewStateManager(statePath string) (*StateManager, error) {
 	sm := &StateManager{
 		statePath: statePath,
+		state:     make(map[string]*common.CdcCursorState),
 	}
 
 	// Ensure directory exists
@@ -32,14 +34,25 @@ func NewStateManager(statePath string) (*StateManager, error) {
 
 	// Load existing state if present
 	if data, err := os.ReadFile(statePath); err == nil {
-		var state common.CdcCursorState
-		if err := json.Unmarshal(data, &state); err != nil {
-			return nil, err
+		// Try to unmarshal as map first
+		var multiState map[string]*common.CdcCursorState
+		if err := json.Unmarshal(data, &multiState); err == nil && len(multiState) > 0 {
+			sm.state = multiState
+			log.Info().Int("count", len(multiState)).Msg("Loaded existing multi-cursor state")
+		} else {
+			// Fallback: try unmarshal as single state (legacy migration)
+			var singleState common.CdcCursorState
+			if err := json.Unmarshal(data, &singleState); err == nil && !singleState.UpdatedAt.IsZero() {
+				// Assign to "default" source
+				sm.state["default"] = &singleState
+				log.Info().
+					Str("last_lsn", singleState.LastProcessedLsn.ToHexString()).
+					Msg("Loaded existing legacy cursor state as 'default'")
+			} else {
+				// If both fail, start fresh (or file is empty/corrupt)
+				log.Warn().Msg("Could not parse state file, starting fresh")
+			}
 		}
-		sm.state = &state
-		log.Info().
-			Str("last_lsn", state.LastProcessedLsn.ToHexString()).
-			Msg("Loaded existing cursor state")
 	} else {
 		log.Info().Msg("No existing state file, starting fresh")
 	}
@@ -47,53 +60,56 @@ func NewStateManager(statePath string) (*StateManager, error) {
 	return sm, nil
 }
 
-// GetCursor returns the current cursor state.
-func (sm *StateManager) GetCursor() *common.CdcCursorState {
+// GetCursor returns the current cursor state for a given source.
+func (sm *StateManager) GetCursor(sourceName string) *common.CdcCursorState {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 
-	if sm.state == nil {
+	state, ok := sm.state[sourceName]
+	if !ok || state == nil {
 		return nil
 	}
 
 	// Return a copy
-	stateCopy := *sm.state
+	stateCopy := *state
 	return &stateCopy
 }
 
-// UpdateCursor updates the cursor after a successful acknowledgment.
-// This is the critical operation that ensures exactly-once semantics.
-func (sm *StateManager) UpdateCursor(batchID string, newLsn common.Lsn) error {
+// UpdateCursor updates the cursor for a specific source after a successful acknowledgment.
+func (sm *StateManager) UpdateCursor(sourceName string, batchID string, newLsn common.Lsn) error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
 	log.Debug().
+		Str("source", sourceName).
 		Str("batch_id", batchID).
 		Str("new_lsn", newLsn.ToHexString()).
 		Msg("Updating cursor")
 
-	if sm.state == nil {
-		sm.state = &common.CdcCursorState{
-			TableName:        "all", // Simplified - tracking all tables together
+	state, ok := sm.state[sourceName]
+	if !ok || state == nil {
+		sm.state[sourceName] = &common.CdcCursorState{
+			TableName:        "all", // Simplified - tracking all tables together per source
 			LastProcessedLsn: newLsn,
 			PendingBatches:   []common.PendingBatch{},
 			UpdatedAt:        time.Now().UTC(),
 		}
+		state = sm.state[sourceName]
 	}
 
 	// Remove the acknowledged batch from pending
-	newPending := make([]common.PendingBatch, 0, len(sm.state.PendingBatches))
-	for _, b := range sm.state.PendingBatches {
+	newPending := make([]common.PendingBatch, 0, len(state.PendingBatches))
+	for _, b := range state.PendingBatches {
 		if b.BatchID != batchID {
 			newPending = append(newPending, b)
 		}
 	}
-	sm.state.PendingBatches = newPending
+	state.PendingBatches = newPending
 
 	// Update the acknowledged LSN
-	sm.state.LastAckedLsn = &newLsn
-	sm.state.LastProcessedLsn = newLsn
-	sm.state.UpdatedAt = time.Now().UTC()
+	state.LastAckedLsn = &newLsn
+	state.LastProcessedLsn = newLsn
+	state.UpdatedAt = time.Now().UTC()
 
 	// Persist to disk
 	if err := sm.persistState(); err != nil {
@@ -104,45 +120,53 @@ func (sm *StateManager) UpdateCursor(batchID string, newLsn common.Lsn) error {
 	return nil
 }
 
-// RecordPendingBatch records a batch as pending (sent but not yet acknowledged).
-func (sm *StateManager) RecordPendingBatch(batchID string, lsn common.Lsn, sequenceCount uint64) error {
+// RecordPendingBatch records a batch as pending for a specific source.
+func (sm *StateManager) RecordPendingBatch(sourceName string, batchID string, lsn common.Lsn, sequenceCount uint64) error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
-	if sm.state != nil {
-		sm.state.PendingBatches = append(sm.state.PendingBatches, common.PendingBatch{
-			BatchID:       batchID,
-			Lsn:           lsn,
-			SequenceCount: sequenceCount,
-			SentAt:        time.Now().UTC(),
-		})
-		return sm.persistState()
+	state, ok := sm.state[sourceName]
+	if !ok || state == nil {
+		// Initialize state if not exists, though usually GetCursor would be called first
+		state = &common.CdcCursorState{
+			TableName:        "all",
+			LastProcessedLsn: lsn, // Temporarily set
+			UpdatedAt:        time.Now().UTC(),
+		}
+		sm.state[sourceName] = state
 	}
 
-	return nil
+	state.PendingBatches = append(state.PendingBatches, common.PendingBatch{
+		BatchID:       batchID,
+		Lsn:           lsn,
+		SequenceCount: sequenceCount,
+		SentAt:        time.Now().UTC(),
+	})
+	return sm.persistState()
 }
 
 // GetPendingBatches returns batches that were sent but never acknowledged (for recovery).
-func (sm *StateManager) GetPendingBatches() []common.PendingBatch {
+// Returns a map of sourceName -> []PendingBatch
+func (sm *StateManager) GetPendingBatches() map[string][]common.PendingBatch {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 
-	if sm.state == nil {
-		return nil
+	result := make(map[string][]common.PendingBatch)
+	for source, state := range sm.state {
+		if len(state.PendingBatches) > 0 {
+			batches := make([]common.PendingBatch, len(state.PendingBatches))
+			copy(batches, state.PendingBatches)
+			result[source] = batches
+		}
 	}
-
-	// Return a copy
-	result := make([]common.PendingBatch, len(sm.state.PendingBatches))
-	copy(result, sm.state.PendingBatches)
 	return result
 }
 
 func (sm *StateManager) persistState() error {
-	if sm.state == nil {
-		return nil
-	}
-
+	sm.mu.RLock() // Lock for reading parsing map
 	data, err := json.MarshalIndent(sm.state, "", "  ")
+	sm.mu.RUnlock()
+
 	if err != nil {
 		return err
 	}

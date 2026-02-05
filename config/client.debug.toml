@@ -2,10 +2,16 @@
 # This debug-specific config is loaded when you set CLIENT_CONFIG_FILE=config/client.debug
 
 # Example local MSSQL connection string (uncomment and edit when running locally)
-mssql_connection_string = "Server=localhost;Database=testdb;User Id=sa;Password=StrongPassword123!;TrustServerCertificate=true"
+# Deprecated: mssql_connection_string = "Server=localhost;Database=testdb;User Id=sa;Password=StrongPassword123!;TrustServerCertificate=true"
+
+# Define Multiple Sources
+[[sources]]
+name = "MyLocalDB"
+type = "mssql"
+connection_string = "Server=localhost;Database=testdb;User Id=sa;Password=StrongPassword123!;TrustServerCertificate=true"
 
 # Connect to local server running on debug port
-server_url = "http://127.0.0.1:50051"
+server_url = "127.0.0.1:50051"
 
 # Keep debug state separate so you don't pollute production state
 state_file_path = "./data/cdc_cursor_state.debug.json"
@@ -28,12 +34,14 @@ ack_timeout_secs = 10
 
 # Track the example tables from the repository
 [[tracked_tables]]
+database_name = "MyLocalDB"
 source_schema = "dbo"
 source_table = "users"
 target_schema = "public"
 target_table = "users"
 
 [[tracked_tables]]
+database_name = "MyLocalDB"
 source_schema = "dbo"
 source_table = "orders"
 target_schema = "public"
