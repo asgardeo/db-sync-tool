@@ -1,15 +1,6 @@
 # CDC Client Debug Configuration
 # This debug-specific config is loaded when you set CLIENT_CONFIG_FILE=config/client.debug
 
-# Example local MSSQL connection string (uncomment and edit when running locally)
-# Deprecated: mssql_connection_string = "Server=localhost;Database=testdb;User Id=sa;Password=StrongPassword123!;TrustServerCertificate=true"
-
-# Define Multiple Sources
-[[sources]]
-name = "MyLocalDB"
-type = "mssql"
-connection_string = "Server=localhost;Database=testdb;User Id=sa;Password=StrongPassword123!;TrustServerCertificate=true"
-
 # Connect to local server running on debug port
 server_url = "127.0.0.1:50051"
 
@@ -31,6 +22,15 @@ ack_timeout_secs = 10
 # client_cert_path = "./certs/client.crt"
 # client_key_path = "./certs/client.key"
 # domain_name = "localhost"
+
+# Example local MSSQL connection string (uncomment and edit when running locally)
+# Deprecated: mssql_connection_string = "Server=localhost;Database=testdb;User Id=sa;Password=StrongPassword123!;TrustServerCertificate=true"
+
+# Define Multiple Sources
+[[sources]]
+name = "MyLocalDB"
+type = "mssql"
+connection_string = "Server=localhost;Database=testdb;User Id=sa;Password=StrongPassword123!;TrustServerCertificate=true"
 
 # Track the example tables from the repository
 [[tracked_tables]]
