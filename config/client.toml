@@ -1,0 +1,53 @@
+# CDC Client Configuration
+# This file is loaded automatically. Values can be overridden with environment variables
+# prefixed with CLIENT__ (e.g., CLIENT__CONNECTION_STRING)
+
+# CDC Reader type (currently supports: "mssql")
+reader_type = "mssql"
+
+# Database connection string (required)
+# connection_string = "Server=localhost;Database=mydb;User Id=sa;Password=secret;TrustServerCertificate=true"
+
+# Legacy MSSQL connection string (deprecated, use connection_string instead)
+
+# Server gRPC URL (required)
+# server_url = "https://server.example.com:50051"
+
+# Path to state file for cursor persistence
+state_file_path = "./data/cdc_cursor_state.json"
+
+# Polling interval when no changes are found (milliseconds)
+poll_interval_ms = 1000
+
+# Maximum changes per batch
+batch_size = 1000
+
+# Acknowledgment timeout (seconds)
+ack_timeout_secs = 30
+
+# TLS Configuration for connecting to CDC server
+[tls]
+# Path to CA certificate for verifying the server
+# ca_cert_path = "./certs/ca.crt"
+
+# Path to client certificate (for mTLS)
+# client_cert_path = "./certs/client.crt"
+
+# Path to client private key (for mTLS)
+# client_key_path = "./certs/client.key"
+
+# Server domain name for TLS verification
+# domain_name = "server.example.com"
+
+# Tables to track for CDC synchronization
+[[tracked_tables]]
+source_schema = "dbo"
+source_table = "users"
+target_schema = "public"
+target_table = "users"
+
+[[tracked_tables]]
+source_schema = "dbo"
+source_table = "orders"
+target_schema = "public"
+target_table = "orders"

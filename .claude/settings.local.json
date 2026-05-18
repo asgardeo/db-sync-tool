@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo build:*)",
+      "Bash(~/.cargo/bin/cargo build:*)",
+      "Bash(mkdir:*)",
+      "Bash(find:*)",
+      "Bash(tree:*)",
+      "Bash(docker info:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker-compose:*)",
+      "Bash(docker exec:*)",
+      "Bash(curl:*)",
+      "Bash(docker cp:*)",
+      "Bash(./setup.sh:*)",
+      "Bash(docker ps:*)",
+      "Bash(go mod tidy:*)",
+      "Bash(go build:*)",
+      "mcp__mssql__execute_query",
+      "Bash(chmod:*)",
+      "Bash(./run_cdc_test.sh:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

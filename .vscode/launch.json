@@ -1,0 +1,55 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug cdc-client",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/cdc-client",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "LOG_LEVEL": "debug",
+        "CLIENT_CONFIG_FILE": "config/client.debug"
+      },
+      "args": []
+    },
+    {
+      "name": "Debug cdc-server",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/cdc-server",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "LOG_LEVEL": "debug",
+        "SERVER_CONFIG_FILE": "config/server.debug"
+      },
+      "args": []
+    },
+    {
+      "name": "Run cdc-client",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/cdc-client",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "LOG_LEVEL": "info"
+      },
+      "args": []
+    },
+    {
+      "name": "Run cdc-server",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/cdc-server",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "LOG_LEVEL": "info"
+      },
+      "args": []
+    }
+  ]
+}
