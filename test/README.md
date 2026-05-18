@@ -103,7 +103,7 @@ This will:
 **Connection String Examples:**
 
 - SQL Server Management Studio: `Server=localhost,1433;User Id=sa;Password=StrongPassword123!;Database=testdb;TrustServerCertificate=true;`
-- Python: `pyodbc.connect('Driver={ODBC Driver 17 for SQL Server};Server=localhost,1433;Database=testdb;UID=sa;PWD=StrongPassword123;TrustServerCertificate=yes;')`
+- Python: `pyodbc.connect('Driver={ODBC Driver 17 for SQL Server};Server=localhost,1433;Database=testdb;UID=sa;PWD=StrongPassword123!;TrustServerCertificate=yes;')`
 - Node.js: `Server=localhost;Database=testdb;UID=sa;PWD=StrongPassword123!;TrustServerCertificate=true;`
 
 ### PostgreSQL

@@ -2,11 +2,13 @@
 package mssql
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +19,20 @@ import (
 	"github.com/wso2/db-sync-tool/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+// identifierPattern matches SQL Server regular identifiers used in CDC capture-instance
+// names and column names. The CDC function `cdc.fn_cdc_get_all_changes_<capture>` and the
+// bracketed column-list in the SELECT must be composed dynamically (the capture name is
+// part of the function identifier), so values that flow into those positions are validated
+// to contain only safe identifier characters.
+var identifierPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+func validateIdentifier(name, kind string) error {
+	if !identifierPattern.MatchString(name) {
+		return fmt.Errorf("invalid %s identifier: %q", kind, name)
+	}
+	return nil
+}
 
 // MSSQLReader reads CDC changes from Microsoft SQL Server.
 // Implements the connector.CDCReader interface.
@@ -218,16 +234,24 @@ func (r *MSSQLReader) getCdcTables(ctx context.Context) ([]cdcTable, error) {
 }
 
 func (r *MSSQLReader) readTableChanges(ctx context.Context, captureInstance, schema, table string, fromLsn []byte, batchSize uint32) ([]*proto.ChangeRequest, error) {
-	// Get the minimum valid LSN for this specific capture instance
+	// The capture instance name appears unquoted in the CDC function identifier
+	// `cdc.fn_cdc_get_all_changes_<capture>` below, so it must be a valid identifier.
+	if err := validateIdentifier(captureInstance, "capture instance"); err != nil {
+		return nil, err
+	}
+
+	// Get the minimum valid LSN for this specific capture instance.
+	// sys.fn_cdc_get_min_lsn takes a parameter, so this is parameterized.
 	var tableMinLsn []byte
-	minLsnQuery := fmt.Sprintf("SELECT sys.fn_cdc_get_min_lsn('%s')", captureInstance)
-	if err := r.db.QueryRowContext(ctx, minLsnQuery).Scan(&tableMinLsn); err != nil {
+	if err := r.db.QueryRowContext(ctx, "SELECT sys.fn_cdc_get_min_lsn(@p1)", captureInstance).Scan(&tableMinLsn); err != nil {
 		return nil, fmt.Errorf("failed to get min LSN for %s: %w", captureInstance, err)
 	}
 
-	// Use the greater of fromLsn or tableMinLsn to ensure we're within valid range
+	// Use the greater of fromLsn or tableMinLsn to ensure we're within valid range.
+	// MSSQL LSNs are 10-byte big-endian values, so a direct byte comparison gives
+	// correct ordering and avoids the cost of hex encoding both operands.
 	effectiveLsn := fromLsn
-	if len(tableMinLsn) > 0 && common.NewLsn(tableMinLsn).ToHexString() > common.NewLsn(fromLsn).ToHexString() {
+	if len(tableMinLsn) > 0 && bytes.Compare(tableMinLsn, fromLsn) > 0 {
 		effectiveLsn = tableMinLsn
 	}
 
@@ -409,7 +433,9 @@ func convertValue(val interface{}, colType *sql.ColumnType) interface{} {
 }
 
 func (r *MSSQLReader) getColumnMetadata(ctx context.Context, schema, table string) ([]*proto.ColumnMetadata, error) {
-	query := fmt.Sprintf(`
+	// Parameterized query against INFORMATION_SCHEMA. go-mssqldb supports
+	// named parameters via the @p1, @p2, ... convention.
+	const query = `
 		SELECT
 			c.COLUMN_NAME,
 			c.DATA_TYPE,
@@ -425,14 +451,14 @@ func (r *MSSQLReader) getColumnMetadata(ctx context.Context, schema, table strin
 			JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE ku
 				ON tc.CONSTRAINT_NAME = ku.CONSTRAINT_NAME
 			WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
-				AND tc.TABLE_SCHEMA = '%s'
-				AND tc.TABLE_NAME = '%s'
+				AND tc.TABLE_SCHEMA = @p1
+				AND tc.TABLE_NAME = @p2
 		) pk ON c.COLUMN_NAME = pk.COLUMN_NAME
-		WHERE c.TABLE_SCHEMA = '%s' AND c.TABLE_NAME = '%s'
+		WHERE c.TABLE_SCHEMA = @p1 AND c.TABLE_NAME = @p2
 		ORDER BY c.ORDINAL_POSITION
-	`, schema, table, schema, table)
+	`
 
-	rows, err := r.db.QueryContext(ctx, query)
+	rows, err := r.db.QueryContext(ctx, query, schema, table)
 	if err != nil {
 		return nil, err
 	}

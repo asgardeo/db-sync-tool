@@ -8,23 +8,17 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 	"github.com/wso2/db-sync-tool/internal/common"
+	"github.com/wso2/db-sync-tool/internal/connector"
 	"github.com/wso2/db-sync-tool/internal/connector/mssql"
 	"github.com/wso2/db-sync-tool/proto"
 )
-
-// CDCReader defines the interface for reading CDC changes.
-// This allows the SyncOrchestrator to work with different database implementations.
-type CDCReader interface {
-	PollChanges(ctx context.Context, fromPosition []byte, batchSize uint32) ([]*proto.ChangeRequest, []byte, error)
-	Close() error
-}
 
 // SyncOrchestrator orchestrates the CDC sync process.
 type SyncOrchestrator struct {
 	config       *Config
 	stateManager *StateManager
 	// cdcReaders is a map of source name -> reader
-	cdcReaders map[string]CDCReader
+	cdcReaders map[string]connector.CDCReader
 	grpcClient *StreamingClient
 	// tableMappings is a nested map: SourceName -> SourceSchema -> SourceTable -> TrackedTable
 	tableMappings map[string]map[string]map[string]*common.TrackedTable
@@ -37,9 +31,9 @@ func NewSyncOrchestrator(config *Config) (*SyncOrchestrator, error) {
 		return nil, fmt.Errorf("failed to create state manager: %w", err)
 	}
 
-	cdcReaders := make(map[string]CDCReader)
+	cdcReaders := make(map[string]connector.CDCReader)
 	for _, source := range config.Sources {
-		var cdcReader CDCReader
+		var cdcReader connector.CDCReader
 		switch source.Type {
 		case "mssql":
 			cdcReader, err = mssql.NewMSSQLReader(source.ConnectionString)

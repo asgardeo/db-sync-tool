@@ -60,13 +60,12 @@ func createChannel(config *Config) (*grpc.ClientConn, error) {
 		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 
-	// Connect with timeout
-	_, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
+	// grpc.NewClient is non-blocking and does not accept a context — the channel
+	// is connected lazily on first RPC. Connectivity is verified by the
+	// orchestrator via HealthCheck (see SyncOrchestrator.Run).
 	conn, err := grpc.NewClient(config.ServerURL, opts...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to server: %w", err)
+		return nil, fmt.Errorf("failed to create gRPC client: %w", err)
 	}
 
 	return conn, nil

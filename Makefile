@@ -1,4 +1,4 @@
-.PHONY: all build build-client build-server clean test proto deps run-client run-server lint
+.PHONY: all build build-client build-server clean test test-coverage proto proto-deps deps run-client run-server lint fmt certs help
 
 # Build configuration
 BINARY_DIR := bin
@@ -76,11 +76,6 @@ lint:
 # Format code
 fmt:
 	$(GO) fmt ./...
-
-# Docker build
-docker-build:
-	docker build -t cdc-client:latest -f Dockerfile.client .
-	docker build -t cdc-server:latest -f Dockerfile.server .
 
 # Generate certificates for development
 certs:

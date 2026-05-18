@@ -162,11 +162,10 @@ func (sm *StateManager) GetPendingBatches() map[string][]common.PendingBatch {
 	return result
 }
 
+// persistState writes the current state to disk atomically.
+// Callers must hold sm.mu (Lock or RLock) — sync.RWMutex is not reentrant.
 func (sm *StateManager) persistState() error {
-	sm.mu.RLock() // Lock for reading parsing map
 	data, err := json.MarshalIndent(sm.state, "", "  ")
-	sm.mu.RUnlock()
-
 	if err != nil {
 		return err
 	}

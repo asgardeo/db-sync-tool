@@ -41,7 +41,6 @@ make lint               # Run golangci-lint
 make fmt                # Format code
 make certs              # Generate dev TLS certs
 make clean              # Remove build artifacts
-make docker-build       # Build Docker images
 ```
 
 ## Project Structure

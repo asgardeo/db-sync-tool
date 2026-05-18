@@ -201,8 +201,8 @@ usage() {
     echo "  show     - Show current data in tables"
     echo ""
     echo "Environment variables:"
-    echo "  MSSQL_CONTAINER - Docker container name (default: mssql)"
-    echo "  SA_PASSWORD     - SA password (default: YourStrong@Passw0rd)"
+    echo "  MSSQL_CONTAINER - Docker container name (default: mssql-test-db)"
+    echo "  SA_PASSWORD     - SA password (default: StrongPassword123!)"
 }
 
 # Main
