@@ -15,7 +15,7 @@ import (
 // CDCReader defines the interface for reading CDC changes.
 // This allows the SyncOrchestrator to work with different database implementations.
 type CDCReader interface {
-	PollChanges(ctx context.Context, fromPosition []byte, batchSize uint32) ([]*proto.ChangeRequest, error)
+	PollChanges(ctx context.Context, fromPosition []byte, batchSize uint32) ([]*proto.ChangeRequest, []byte, error)
 	Close() error
 }
 
@@ -233,12 +233,24 @@ func (o *SyncOrchestrator) syncCycle(ctx context.Context) (uint64, error) {
 		if fromLsn != nil {
 			fromPosition = fromLsn.Bytes()
 		}
-		changes, err := reader.PollChanges(ctx, fromPosition, o.config.BatchSize)
+		changes, maxLsn, err := reader.PollChanges(ctx, fromPosition, o.config.BatchSize)
 		if err != nil {
 			return totalChangesProcessed, fmt.Errorf("failed to poll changes from %s: %w", source.Name, err)
 		}
 
 		if len(changes) == 0 {
+			// If we have a maxLsn, update cursor to it to avoid re-polling from start
+			if len(maxLsn) > 0 {
+				log.Debug().
+					Str("source", source.Name).
+					Str("max_lsn", common.NewLsn(maxLsn).ToHexString()).
+					Msg("No changes found, advancing cursor to max_lsn")
+
+				dummyBatchID := "no-changes-" + uuid.New().String()
+				if err := o.stateManager.UpdateCursor(source.Name, dummyBatchID, common.NewLsn(maxLsn)); err != nil {
+					return totalChangesProcessed, fmt.Errorf("failed to update cursor for %s: %w", source.Name, err)
+				}
+			}
 			continue
 		}
 

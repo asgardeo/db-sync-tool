@@ -56,7 +56,7 @@ func (r *MSSQLReader) Close() error {
 }
 
 // PollChanges polls for CDC changes starting from the given LSN.
-func (r *MSSQLReader) PollChanges(ctx context.Context, fromPosition []byte, batchSize uint32) ([]*proto.ChangeRequest, error) {
+func (r *MSSQLReader) PollChanges(ctx context.Context, fromPosition []byte, batchSize uint32) ([]*proto.ChangeRequest, []byte, error) {
 	var fromLsn *common.Lsn
 	if len(fromPosition) > 0 {
 		lsn := common.NewLsn(fromPosition)
@@ -66,13 +66,13 @@ func (r *MSSQLReader) PollChanges(ctx context.Context, fromPosition []byte, batc
 	// Get the valid LSN range
 	minLsn, maxLsn, err := r.getLsnRange(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get LSN range: %w", err)
+		return nil, nil, fmt.Errorf("failed to get LSN range: %w", err)
 	}
 
 	// If maxLsn is nil or empty, there are no CDC changes available yet
 	if len(maxLsn) == 0 {
 		log.Debug().Msg("No CDC changes available yet (max_lsn is NULL)")
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	// Determine starting LSN
@@ -80,7 +80,7 @@ func (r *MSSQLReader) PollChanges(ctx context.Context, fromPosition []byte, batc
 	if fromLsn != nil {
 		nextLsn, err := r.getNextLsn(ctx, fromLsn.Bytes())
 		if err != nil {
-			return nil, fmt.Errorf("failed to get next LSN: %w", err)
+			return nil, nil, fmt.Errorf("failed to get next LSN: %w", err)
 		}
 		if nextLsn != nil {
 			startLsn = nextLsn
@@ -94,7 +94,7 @@ func (r *MSSQLReader) PollChanges(ctx context.Context, fromPosition []byte, batc
 	// If startLsn is still nil or empty, use minLsn from a valid capture instance
 	if len(startLsn) == 0 {
 		log.Debug().Msg("No valid start LSN available")
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	log.Debug().
@@ -105,7 +105,7 @@ func (r *MSSQLReader) PollChanges(ctx context.Context, fromPosition []byte, batc
 	// Get all tracked CDC tables
 	cdcTables, err := r.getCdcTables(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get CDC tables: %w", err)
+		return nil, nil, fmt.Errorf("failed to get CDC tables: %w", err)
 	}
 
 	var allChanges []*proto.ChangeRequest
@@ -126,7 +126,7 @@ func (r *MSSQLReader) PollChanges(ctx context.Context, fromPosition []byte, batc
 		}
 	}
 
-	return allChanges, nil
+	return allChanges, maxLsn, nil
 }
 
 type cdcTable struct {
